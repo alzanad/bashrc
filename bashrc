@@ -31,7 +31,6 @@ HISTCONTROL=ignoredups:ignorespace
 shopt -s histappend
 HISTSIZE=1000
 HISTFILESIZE=2000
-export PROMPT_COMMAND="history -a; history -c; history -r; ${PROMPT_COMMAND:-}"
 
 # تحسينات السلوك
 shopt -s checkwinsize   # تحديث أبعاد النافذة
@@ -47,7 +46,7 @@ get_chroot_environment() {
      [ -n "${container:-}" ] ||
      [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
     if [ -f /etc/hostname ]; then
-      echo "( $(cat /etc/hostname) )"
+      echo "( $(</etc/hostname) )"
     else
       echo "(container)"
     fi
@@ -71,6 +70,7 @@ prompt_end_symbol_color_var="\[\033[38;2;55;88;138m\]"
 
 set_custom_prompt() {
   local exit_code=$?
+
   local exit_code_indicator=""
   if [ $exit_code != 0 ]; then
     exit_code_indicator="[${prompt_frame_color_var}✘${prompt_success_indicator_color_var}:$exit_code]"
@@ -88,11 +88,16 @@ set_custom_prompt() {
     prompt_symbol="#"
   fi
 
-  PS1="${prompt_frame_color_var}┌─${exit_code_indicator}─[${user_info}${prompt_hostname_color_var}\h${prompt_frame_color_var}]─[${prompt_current_dir_color_var}\w${prompt_frame_color_var}]\n└─${prompt_end_symbol_color_var}${prompt_symbol}${prompt_reset_color_var} "
+  local venv=""
+  if [ -n "$VIRTUAL_ENV" ]; then
+    venv="(${VIRTUAL_ENV##*/}) "
+  fi
+
+  PS1="${prompt_frame_color_var}┌─${venv}${exit_code_indicator}─[${user_info}${prompt_hostname_color_var}\h${prompt_frame_color_var}]─[${prompt_current_dir_color_var}\w${prompt_frame_color_var}]\n└─${prompt_end_symbol_color_var}${prompt_symbol}${prompt_reset_color_var} "
 }
 
 if [ -t 1 ] && tput setaf 1 >/dev/null 2>&1; then
-  PROMPT_COMMAND=set_custom_prompt
+  PROMPT_COMMAND="history -a; history -c; history -r; set_custom_prompt"
 else
   PS1='${chroot_env:+($chroot_env)}\u@\h:\w\$ '
 fi
