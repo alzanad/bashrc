@@ -69,10 +69,10 @@ prompt_reset_color_var="\[\033[0m\]"
 prompt_end_symbol_color_var="\[\033[38;2;55;88;138m\]"
 
 set_custom_prompt() {
-  local exit_code=$?
+  local exit_code=${1:-0}
 
   local exit_code_indicator=""
-  if [ $exit_code != 0 ]; then
+  if [ "$exit_code" -ne 0 ]; then
     exit_code_indicator="[${prompt_frame_color_var}✘${prompt_success_indicator_color_var}:$exit_code]"
   fi
 
@@ -97,7 +97,7 @@ set_custom_prompt() {
 }
 
 if [ -t 1 ] && tput setaf 1 >/dev/null 2>&1; then
-  PROMPT_COMMAND="history -a; history -c; history -r; set_custom_prompt"
+  PROMPT_COMMAND='last_exit=$?; history -a; history -c; history -r; set_custom_prompt $last_exit'
 else
   PS1='${chroot_env:+($chroot_env)}\u@\h:\w\$ '
 fi
