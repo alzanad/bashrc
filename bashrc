@@ -6,36 +6,30 @@
 #                      التهيئة الأساسية                         #
 #===================================
 
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    export PATH="$PATH:$HOME/.local/bin"
-fi
-
-if [ ! -d "$HOME/.local/bin" ]; then
-    mkdir -pm 700 "$HOME/.local/bin"
-fi
+mkdir -p "$HOME/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
 
 #===================================
 #                          الخروج إن لم تكن الصدفة تفاعلية                    #
 #===================================
 
 case $- in
-  *i*) ;;        # interactive
-  *) return ;;   # غير تفاعلي
+  *i*) ;;
+  *) return 0 ;;
 esac
 
 #===================================
 #                         إعدادات السجل والصدفة                                #
 #===================================
 
-HISTCONTROL=ignoredups:ignorespace
+HISTCONTROL=ignoreboth
 shopt -s histappend
-HISTSIZE=1000
-HISTFILESIZE=2000
+HISTSIZE=5000
+HISTFILESIZE=10000
 
 # تحسينات السلوك
 shopt -s checkwinsize   # تحديث أبعاد النافذة
 shopt -s globstar       # تفعيل البحث العميق **
-shopt -s autocd         # الدخول للمجلدات بدون كتابة cd
 
 #===================================
 #                 اكتشاف بيئة Chroot أو Container                              #
@@ -58,29 +52,28 @@ chroot_env=$(get_chroot_environment)
 #                       إعدادات الألوان لموجه الأوامر                          #
 #===================================
 
-prompt_frame_color_var="\[\033[38;2;55;88;138m\]"
-prompt_success_indicator_color_var="\[\033[38;2;139;148;158m\]"
-prompt_root_user_color_var="\[\033[38;2;255;0;0m\]"
-prompt_regular_user_color_var="\[\033[38;2;55;88;138m\]"
-prompt_at_symbol_color_var="\[\033[38;2;74;111;163m\]"
-prompt_hostname_color_var="\[\033[38;2;137;165;214m\]"
-prompt_current_dir_color_var="\[\033[38;2;137;165;214m\]"
-prompt_reset_color_var="\[\033[0m\]"
-prompt_end_symbol_color_var="\[\033[38;2;55;88;138m\]"
-
 set_custom_prompt() {
   local exit_code=${1:-0}
 
+  local p_frame="\[\033[38;2;55;88;138m\]"
+  local p_err="\[\033[38;2;139;148;158m\]"
+  local p_root="\[\033[38;2;255;0;0m\]"
+  local p_user="\[\033[38;2;55;88;138m\]"
+  local p_at="\[\033[38;2;74;111;163m\]"
+  local p_host="\[\033[38;2;137;165;214m\]"
+  local p_dir="\[\033[38;2;137;165;214m\]"
+  local p_rst="\[\033[0m\]"
+
   local exit_code_indicator=""
   if [ "$exit_code" -ne 0 ]; then
-    exit_code_indicator="[${prompt_frame_color_var}✘${prompt_success_indicator_color_var}:$exit_code]"
+    exit_code_indicator="[${p_frame}✘${p_err}:$exit_code]"
   fi
 
   local user_info=""
   if [ ${EUID} -eq 0 ]; then
-    user_info="${prompt_root_user_color_var}root${prompt_at_symbol_color_var}@"
+    user_info="${p_root}root${p_at}@"
   else
-    user_info="${prompt_regular_user_color_var}\u${prompt_at_symbol_color_var}@"
+    user_info="${p_user}\u${p_at}@"
   fi
 
   local prompt_symbol="$"
@@ -93,11 +86,11 @@ set_custom_prompt() {
     venv="(${VIRTUAL_ENV##*/}) "
   fi
 
-  PS1="${prompt_frame_color_var}┌─${venv}${exit_code_indicator}─[${user_info}${prompt_hostname_color_var}\h${prompt_frame_color_var}]─[${prompt_current_dir_color_var}\w${prompt_frame_color_var}]\n└─${prompt_end_symbol_color_var}${prompt_symbol}${prompt_reset_color_var} "
+  PS1="${p_frame}┌─${venv}${exit_code_indicator}─[${user_info}${p_host}\h${p_frame}]─[${p_dir}\w${p_frame}]\n└─${p_frame}${prompt_symbol}${p_rst} "
 }
 
 if [ -t 1 ] && tput setaf 1 >/dev/null 2>&1; then
-  PROMPT_COMMAND='last_exit=$?; history -a; history -c; history -r; set_custom_prompt $last_exit'
+  PROMPT_COMMAND='last_exit=$?; history -a; set_custom_prompt "$last_exit"'
 else
   PS1='${chroot_env:+($chroot_env)}\u@\h:\w\$ '
 fi
@@ -125,46 +118,28 @@ alias l='ls -CF'
 #                  دالة فك الضغط بدعم صيغ حديثة وأكثر أماناً                   #
 #===================================
 
-extract() {
+unpack() {
     local file="$1"
+
     if [[ -z "$file" ]]; then
-        echo "الاستخدام: extract <اسم الملف>"
+        echo "⚠️  الاستخدام: unpack <اسم_الملف>"
         return 2
     fi
     if [[ ! -f "$file" ]]; then
-        echo "⚠️ الملف غير موجود: $file"
+        echo "❌ خطأ: الملف '$file' غير موجود أو ليس ملفاً عادياً."
         return 1
     fi
+
     case "$file" in
-        *.tar.bz2)   tar xvjf "$file"   ;;
-        *.tar.gz)    tar xvzf "$file"   ;;
-        *.tar.xz)    tar xvJf "$file"   ;;
-        *.tar.zst)   tar --zstd -xvf "$file" ;;
-        *.tbz2)      tar xvjf "$file"   ;;
-        *.tgz)       tar xvzf "$file"   ;;
-        *.tar)       tar xvf "$file"    ;;
-        *.bz2)       bunzip2 "$file"    ;;
-        *.gz)        gunzip "$file"     ;;
-        *.lzma)      unlzma "$file"     ;;
-        *.xz)        unxz "$file"       ;;
-        *.zst)
-            if ! type unzstd >/dev/null 2>&1; then echo "⚠️ الأمر 'unzstd' غير مثبت."; return 1; fi
-            unzstd "$file"
-            ;;
-        *.Z)         uncompress "$file" ;;
-        *.zip)       unzip "$file"      ;;
-        *.rar)
-            if ! type unrar >/dev/null 2>&1; then echo "⚠️ الأمر 'unrar' غير مثبت."; return 1; fi
-            unrar x "$file"
-            ;;
-        *.7z)
-            if ! type 7z >/dev/null 2>&1; then echo "⚠️ الأمر '7z' غير مثبت."; return 1; fi
-            7z x "$file"
-            ;;
-        *)
-            echo "⚠️ صيغة غير مدعومة: $file"
-            return 2
-            ;;
+        *.tar)     tar xvf "$file" ;;
+        *.tar.bz2) tar xvjf "$file" ;;
+        *.tar.gz)  tar xvzf "$file" ;;
+        *.tar.xz)  tar xvJf "$file" ;;
+        *.tar.zst) tar --zstd -xvf "$file" ;;
+        *.zip)     unzip "$file" ;;
+        *.rar)     command -v unrar >/dev/null && unrar x "$file" ;;
+        *.7z)      command -v 7z >/dev/null && 7z x "$file" ;;
+        *) echo "غير مدعوم" ;;
     esac
 }
 
@@ -179,33 +154,55 @@ set -o noclobber
 #           دالة لمسح مجلدات __pycache__ وغيرها من مخلفات التطوير               #
 #===================================
 
-# تشغيلها بكتابة: remove
-remove() {
-    # قائمة المجلدات والملفات المؤقتة المراد حذفها
-    local patterns=(
-        __pycache__ .pytest_cache .mypy_cache .ruff_cache
-        .cache *.egg-info .coverage
-    )
-    local find_args=()
-    for pattern in "${patterns[@]}"; do
-        find_args+=(-o -name "$pattern")
+# تشغيلها بكتابة: cln
+cln() {
+    mapfile -d '' targets < <(find . \( \
+        -type d -name "__pycache__" -o \
+        -type d -name ".pytest_cache" -o \
+        -type d -name ".mypy_cache" -o \
+        -type d -name ".ruff_cache" -o \
+        -type d -name ".cache" -o \
+        -name "*.egg-info" -o \
+        -name ".coverage" \
+    \) -print0 2>/dev/null)
+
+    local count=${#targets[@]}
+    [[ $count -eq 0 ]] && { echo "✅ بيئة العمل نظيفة سلفاً."; return 0; }
+
+    local total_bytes=0
+
+    # 1. حساب الحجم بصرامة تامة قبل الحذف
+    for item in "${targets[@]}"; do
+        if [[ -e "$item" ]]; then
+            local s
+            s=$(du -sb "$item" 2>/dev/null | awk '{print $1}')
+            if [[ "$s" =~ ^[0-9]+$ ]]; then
+                total_bytes=$((total_bytes + s))
+            fi
+        fi
     done
 
-    local deleted_count
-    # نبحث عن مجلدات (-type d) أو ملفات (-type f) تطابق الأنماط
-    deleted_count=$(find . \( -type d -o -type f \) \( "${find_args[@]:1}" \) -print -exec rm -rf {} + 2>/dev/null | wc -l)
+    # 2. الحذف الصامت
+    rm -rf "${targets[@]}" 2>/dev/null
 
-    if [ "$deleted_count" -gt 0 ]; then
-        echo "✅ تم حذف ${deleted_count} من مجلدات وملفات المخلفات."
-    else
-        echo "👍 لم يتم العثور على أي مخلفات."
-    fi
+    # 3. صياغة المخرجات
+    local size
+    size=$(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || echo "${total_bytes} B")
+
+    echo "📦 عدد العناصر المحذوفة: $count"
+    echo "💾 الحجم الفعلي المحرر: $size"
 }
 
+#===================================
 #                 إدارة الأوامر المفضلة                 #
+#===================================
+
 fav() {
     local fav_file="$HOME/.bash_favorites"
-    [ ! -f "$fav_file" ] && touch "$fav_file"
+    if [ ! -f "$fav_file" ]; then
+        touch "$fav_file"
+        chmod 600 "$fav_file"
+    fi
     if [ -z "$1" ]; then
         if [ ! -s "$fav_file" ]; then
             echo "⚠️ القائمة فارغة. أضف أوامر عبر: fav add <command>"
@@ -257,58 +254,12 @@ fav() {
 #   up    # يصعد مجلدًا واحدًا للأعلى (مثل cd ..)
 #   up 3  # يصعد ثلاثة مجلدات للأعلى
 up() {
-    local count=${1:-1} # إذا لم يتم تحديد رقم، الافتراضي هو 1
+    local levels=${1:-1}
+    [[ ! "$levels" =~ ^[0-9]+$ ]] && return 1
     local path=""
-    for ((i=0; i<count; i++)); do
+    for ((i=0; i<levels; i++)); do
         path+="../"
     done
+
     cd "$path" || return
 }
-
-#===================================
-#                   بعض توزيعات لينكس بها قيود على تحميل ب pip                     #
-#===================================
-
-pip() {
-    command pip "$@" --break-system-packages
-}
-
-#===================================
-#                   عرض ذكر عشوائي مزين عند فتح الطرفية                           #
-#===================================
-
-# قائمة الأذكار
-AZKAR=(
-"سبحان الله وبحمده"
-"لا إله إلا الله"
-"الله أكبر"
-"الحمد لله"
-"أستغفر الله"
-"سبحان الله العظيم"
-"لا حول ولا قوة إلا بالله"
-"اللَّهُمَّ ‌صَلِّ وسلم ‌عَلَى ‌مُحَمَّد"
-)
-
-# لون الذكر
-AZKAR_FRAME_COLOR="\033[38;2;55;88;138m"
-AZKAR_TEXT_COLOR="\033[38;2;139;148;158m"
-AZKAR_RESET="\033[0m"
-
-# دالة لاختيار ذكر عشوائي وعرضه
-random_azkar() {
-    local count=${#AZKAR[@]}
-    local index=$(( RANDOM % count ))
-    local azkar="${AZKAR[$index]}"
-
-    # تصميم الإطار
-    local line_length=${#azkar}
-    local border
-    border=$(printf '%*s' $((line_length + 6)) '' | tr ' ' '*')
-
-    echo -e "${AZKAR_FRAME_COLOR}${border}${AZKAR_RESET}"
-    echo -e "${AZKAR_FRAME_COLOR}* ${AZKAR_TEXT_COLOR}${azkar}${AZKAR_FRAME_COLOR} *${AZKAR_RESET}"
-    echo -e "${AZKAR_FRAME_COLOR}${border}${AZKAR_RESET}"
-}
-
-# استدعاء الدالة عند تحميل الصدفة
-[[ $- == *i* ]] && random_azkar
