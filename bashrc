@@ -166,31 +166,22 @@ cln() {
         -name ".coverage" \
     \) -print0 2>/dev/null)
 
-    local count=${#targets[@]}
-    [[ $count -eq 0 ]] && { echo "✅ بيئة العمل نظيفة سلفاً."; return 0; }
+    local total=${#targets[@]}
+    [[ $total -eq 0 ]] && { echo "✅ البيئة نظيفة سلفاً."; return 0; }
 
-    local total_bytes=0
+    local deleted_count=0
 
-    # 1. حساب الحجم بصرامة تامة قبل الحذف
     for item in "${targets[@]}"; do
-        if [[ -e "$item" ]]; then
-            local s
-            s=$(du -sb "$item" 2>/dev/null | awk '{print $1}')
-            if [[ "$s" =~ ^[0-9]+$ ]]; then
-                total_bytes=$((total_bytes + s))
-            fi
+        if rm -rf "$item" 2>/dev/null; then
+            ((deleted_count++))
         fi
     done
 
-    # 2. الحذف الصامت
-    rm -rf "${targets[@]}" 2>/dev/null
+    echo "📦 عدد العناصر المحذوفة فعلياً: $deleted_count"
 
-    # 3. صياغة المخرجات
-    local size
-    size=$(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || echo "${total_bytes} B")
-
-    echo "📦 عدد العناصر المحذوفة: $count"
-    echo "💾 الحجم الفعلي المحرر: $size"
+    if (( deleted_count < total )); then
+        echo "⚠️ فشل حذف $((total - deleted_count)) عنصر بسبب قيود الصلاحيات." >&2
+    fi
 }
 
 #===================================
