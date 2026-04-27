@@ -1,16 +1,15 @@
 #!/bin/bash
 
-# ثبت حزمة bash-completion للإكمال التلقائي
-
 #===================================
-#                      التهيئة الأساسية                         #
+#                      التهيئة الأساسية
 #===================================
 
-mkdir -p "$HOME/.local/bin"
-export PATH="$HOME/.local/bin:$PATH"
+if [ ! -d "$HOME/.local/bin" ]; then
+    mkdir -p "$HOME/.local/bin"
+fi
 
 #===================================
-#                          الخروج إن لم تكن الصدفة تفاعلية                    #
+#                          الخروج إن لم تكن الصدفة تفاعلية
 #===================================
 
 case $- in
@@ -19,20 +18,21 @@ case $- in
 esac
 
 #===================================
-#                         إعدادات السجل والصدفة                                #
+#                         إعدادات السجل والصدفة
 #===================================
 
-HISTCONTROL=ignoreboth
+HISTCONTROL=ignoreboth:erasedups
 shopt -s histappend
-HISTSIZE=5000
-HISTFILESIZE=10000
+HISTSIZE=10000
+HISTFILESIZE=20000
+HISTTIMEFORMAT="%F %T "
 
 # تحسينات السلوك
 shopt -s checkwinsize   # تحديث أبعاد النافذة
-shopt -s globstar       # تفعيل البحث العميق **
+PROMPT_DIRTRIM=3   # تقصير المسار الطويل
 
 #===================================
-#                 اكتشاف بيئة Chroot أو Container                              #
+#                 اكتشاف بيئة Chroot أو Container
 #===================================
 
 get_chroot_environment() {
@@ -49,7 +49,7 @@ get_chroot_environment() {
 chroot_env=$(get_chroot_environment)
 
 #===================================
-#                       إعدادات الألوان لموجه الأوامر                          #
+#                       إعدادات الألوان لموجه الأوامر
 #===================================
 
 set_custom_prompt() {
@@ -63,6 +63,7 @@ set_custom_prompt() {
   local p_host="\[\033[38;2;137;165;214m\]"
   local p_dir="\[\033[38;2;137;165;214m\]"
   local p_rst="\[\033[0m\]"
+  local p_venv="\[\033[38;2;34;139;34m\]"
 
   local exit_code_indicator=""
   if [ "$exit_code" -ne 0 ]; then
@@ -81,16 +82,16 @@ set_custom_prompt() {
     prompt_symbol="#"
   fi
 
-  local venv=""
+    local venv=""
   if [ -n "$VIRTUAL_ENV" ]; then
-    venv="(${VIRTUAL_ENV##*/}) "
+    venv="${p_venv}(${VIRTUAL_ENV##*/})${p_frame} "
   fi
 
   PS1="${p_frame}┌─${venv}${exit_code_indicator}─[${user_info}${p_host}\h${p_frame}]─[${p_dir}\w${p_frame}]\n└─${p_frame}${prompt_symbol}${p_rst} "
 }
 
 if [ -t 1 ] && tput setaf 1 >/dev/null 2>&1; then
-  PROMPT_COMMAND='last_exit=$?; history -a; set_custom_prompt "$last_exit"'
+  PROMPT_COMMAND='last_exit=$?; set_custom_prompt "$last_exit"; history -a'
 else
   PS1='${chroot_env:+($chroot_env)}\u@\h:\w\$ '
 fi
@@ -102,7 +103,7 @@ case "$TERM" in
 esac
 
 #===================================
-#                        الأسماء المستعارة                                     #
+#                        الأسماء المستعارة
 #===================================
 
 case "$OSTYPE" in
@@ -110,48 +111,66 @@ case "$OSTYPE" in
   bsd*)   alias ls='ls -G' ;;
 esac
 
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
-
 #===================================
-#                  دالة فك الضغط بدعم صيغ حديثة وأكثر أماناً                   #
+#                  دالة فك الضغط بدعم صيغ حديثة وأكثر أماناً
 #===================================
 
 unpack() {
     local file="$1"
 
     if [[ -z "$file" ]]; then
-        echo "⚠️  الاستخدام: unpack <اسم_الملف>"
+        echo "الاستخدام: unpack <ملف>"
         return 2
     fi
+
     if [[ ! -f "$file" ]]; then
-        echo "❌ خطأ: الملف '$file' غير موجود أو ليس ملفاً عادياً."
+        echo "خطأ: '$file' ليس ملفاً صحيحاً"
         return 1
     fi
 
-    case "$file" in
-        *.tar)     tar xvf "$file" ;;
-        *.tar.bz2) tar xvjf "$file" ;;
-        *.tar.gz)  tar xvzf "$file" ;;
-        *.tar.xz)  tar xvJf "$file" ;;
-        *.tar.zst) tar --zstd -xvf "$file" ;;
-        *.zip)     unzip "$file" ;;
-        *.rar)     command -v unrar >/dev/null && unrar x "$file" ;;
-        *.7z)      command -v 7z >/dev/null && 7z x "$file" ;;
-        *) echo "غير مدعوم" ;;
+    case "${file,,}" in
+        *.tar)              tar -xvf "$file" ;;
+        *.tar.gz|*.tgz)     tar -xvzf "$file" ;;
+        *.tar.bz2|*.tbz2)   tar -xvjf "$file" ;;
+        *.tar.xz|*.txz)     tar -xvJf "$file" ;;
+        *.tar.zst|*.tzst)   tar --zstd -xvf "$file" ;;
+        *.gz)               gunzip "$file" ;;
+        *.bz2)              bunzip2 "$file" ;;
+        *.xz)               unxz "$file" ;;
+        *.zst)              unzstd "$file" ;;
+        *.zip)              unzip "$file" ;;
+        *.rar)              command -v unrar >/dev/null && unrar x "$file" || echo "unrar غير مثبت" ;;
+        *.7z)               command -v 7z >/dev/null && 7z x "$file" || echo "7z غير مثبت" ;;
+        *.Z)                uncompress "$file" ;;
+        *)
+            # fallback ذكي باستخدام file
+            local type
+            type=$(file -b "$file")
+
+            case "$type" in
+                *gzip*)     gunzip -k "$file" ;;
+                *bzip2*)    tar -xvjf "$file" 2>/dev/null || bunzip2 "$file" ;;
+                *XZ*)       tar -xvJf "$file" 2>/dev/null || unxz "$file" ;;
+                *Zstandard*) tar --zstd -xvf "$file" ;;
+                *Zip*)      unzip "$file" ;;
+                *)
+                    echo "صيغة غير مدعومة: $file"
+                    return 3
+                    ;;
+            esac
+        ;;
     esac
 }
 
 #===================================
-#                   إعدادات أمان إضافية                                       #
+#                   إعدادات أمان إضافية
 #===================================
 
 umask 027
 set -o noclobber
 
 #===================================
-#           دالة لمسح مجلدات __pycache__ وغيرها من مخلفات التطوير               #
+#           دالة لمسح مجلدات __pycache__ وغيرها من مخلفات التطوير
 #===================================
 
 # تشغيلها بكتابة: cln
@@ -185,7 +204,7 @@ cln() {
 }
 
 #===================================
-#                 إدارة الأوامر المفضلة                 #
+#                 إدارة الأوامر المفضلة
 #===================================
 
 fav() {
@@ -238,7 +257,7 @@ fav() {
 }
 
 #===================================
-#                   دالة للتنقل السريع بين المجلدات للأعلى                     #
+#                   دالة للتنقل السريع بين المجلدات للأعلى
 #===================================
 
 # الاستخدام:
